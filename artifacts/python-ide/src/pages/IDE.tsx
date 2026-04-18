@@ -5,17 +5,17 @@ import { PreviewPanel } from "../components/PreviewPanel";
 import { LibraryPanel } from "../components/LibraryPanel";
 import { ThemeSelector, Theme } from "../components/ThemeSelector";
 import { TemplateSelector } from "../components/TemplateSelector";
+import { MobileKeybar } from "../components/MobileKeybar";
 import { PyodideOutput, getPyodide, installPackage } from "../lib/pyodide-runner";
 import { Library } from "../lib/libraries";
+import { EditorView } from "@codemirror/view";
 import {
   Play,
-  Square,
   Code2,
   Package,
   Monitor,
   Terminal,
   Loader2,
-  ChevronRight,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
@@ -61,6 +61,7 @@ export default function IDE() {
   const [isInstalling, setIsInstalling] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState("");
   const runControllerRef = useRef<AbortController | null>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
 
   const addOutput = useCallback((msg: PyodideOutput) => {
     setOutput((prev) => [...prev, msg]);
@@ -234,6 +235,7 @@ export default function IDE() {
               onChange={setCode}
               onRun={handleRun}
               theme={theme}
+              editorViewRef={editorViewRef}
             />
           </div>
         </div>
@@ -287,6 +289,9 @@ export default function IDE() {
           </div>
         </div>
       </div>
+
+      {/* Mobile special-character keyboard bar */}
+      <MobileKeybar editorViewRef={editorViewRef} />
 
       {/* Status Bar */}
       <div className="flex items-center justify-between px-3 py-1 border-t border-border bg-sidebar shrink-0 text-xs text-muted-foreground">
