@@ -2,155 +2,144 @@ import { useEffect, useState, useRef } from "react";
 import { EditorView } from "@codemirror/view";
 
 const PYTHON_KEYS = [
-  { label: "Tab", value: "    ", display: "⇥" },
-  { label: ":", value: ":", display: ":" },
-  { label: "=", value: "=", display: "=" },
-  { label: "==", value: "==", display: "==" },
-  { label: "!=", value: "!=", display: "!=" },
-  { label: "(", value: "(", display: "(" },
-  { label: ")", value: ")", display: ")" },
-  { label: "[", value: "[", display: "[" },
-  { label: "]", value: "]", display: "]" },
-  { label: "{", value: "{", display: "{" },
-  { label: "}", value: "}", display: "}" },
-  { label: "'", value: "'", display: "'" },
-  { label: '"', value: '"', display: '"' },
-  { label: "#", value: "# ", display: "#" },
-  { label: ",", value: ", ", display: "," },
-  { label: ".", value: ".", display: "." },
-  { label: "+", value: "+", display: "+" },
-  { label: "-", value: "-", display: "-" },
-  { label: "*", value: "*", display: "*" },
-  { label: "**", value: "**", display: "**" },
-  { label: "/", value: "/", display: "/" },
-  { label: "//", value: "//", display: "//" },
-  { label: "%", value: "%", display: "%" },
-  { label: "<", value: "<", display: "<" },
-  { label: ">", value: ">", display: ">" },
-  { label: "<=", value: "<=", display: "<=" },
-  { label: ">=", value: ">=", display: ">=" },
-  { label: "not", value: "not ", display: "not" },
-  { label: "and", value: " and ", display: "and" },
-  { label: "or", value: " or ", display: "or" },
-  { label: "in", value: " in ", display: "in" },
-  { label: "is", value: " is ", display: "is" },
-  { label: "→", value: "->", display: "->" },
-  { label: "_", value: "_", display: "_" },
-  { label: "\\n", value: "\\n", display: "\\n" },
-  { label: "f''", value: "f''", display: "f''" },
-  { label: "f\"\"", value: 'f""', display: 'f""' },
+  { label: "⇥", value: "    " },
+  { label: ":", value: ":" },
+  { label: "=", value: "=" },
+  { label: "==", value: "==" },
+  { label: "!=", value: "!=" },
+  { label: "(", value: "(" },
+  { label: ")", value: ")" },
+  { label: "[", value: "[" },
+  { label: "]", value: "]" },
+  { label: "{", value: "{" },
+  { label: "}", value: "}" },
+  { label: "'", value: "'" },
+  { label: '"', value: '"' },
+  { label: "#", value: "# " },
+  { label: ",", value: ", " },
+  { label: ".", value: "." },
+  { label: "+", value: "+" },
+  { label: "-", value: "-" },
+  { label: "*", value: "*" },
+  { label: "**", value: "**" },
+  { label: "/", value: "/" },
+  { label: "//", value: "//" },
+  { label: "%", value: "%" },
+  { label: "<", value: "<" },
+  { label: ">", value: ">" },
+  { label: "<=", value: "<=" },
+  { label: ">=", value: ">=" },
+  { label: "not", value: "not " },
+  { label: "and", value: " and " },
+  { label: "or", value: " or " },
+  { label: "in", value: " in " },
+  { label: "is", value: " is " },
+  { label: "->", value: "->" },
+  { label: "_", value: "_" },
+  { label: "\\n", value: "\\n" },
+  { label: "f''", value: "f''" },
 ];
+
+const isTouchDevice =
+  typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
 
 interface MobileKeybarProps {
   editorViewRef: React.MutableRefObject<EditorView | null>;
 }
 
 export function MobileKeybar({ editorViewRef }: MobileKeybarProps) {
-  const [visible, setVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const barRef = useRef<HTMLDivElement>(null);
+  const [bottomOffset, setBottomOffset] = useState(0);
+  const initialHeightRef = useRef<number>(
+    typeof window !== "undefined" ? window.innerHeight : 0
+  );
 
   useEffect(() => {
-    const handleViewportChange = () => {
-      const viewport = window.visualViewport;
-      if (!viewport) return;
+    if (!isTouchDevice) return;
 
-      const windowHeight = window.screen.height;
-      const viewportHeight = viewport.height;
-      const heightDiff = windowHeight - viewportHeight;
+    const vv = window.visualViewport;
+    if (!vv) return;
 
-      if (heightDiff > 150) {
-        setVisible(true);
-        setKeyboardHeight(heightDiff);
-      } else {
-        setVisible(false);
-        setKeyboardHeight(0);
-      }
+    const update = () => {
+      // Distance from the bottom of visual viewport to bottom of layout viewport
+      const offsetTop = vv.offsetTop ?? 0;
+      const keyboardHeight = Math.max(
+        0,
+        initialHeightRef.current - (vv.height + offsetTop)
+      );
+      setBottomOffset(keyboardHeight);
     };
 
-    const handleFocusIn = (e: FocusEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest(".cm-editor")) {
-        if (window.visualViewport) {
-          window.visualViewport.addEventListener("resize", handleViewportChange);
-          window.visualViewport.addEventListener("scroll", handleViewportChange);
-          handleViewportChange();
-        }
-      }
+    // Capture the initial full height once (before any keyboard)
+    const handleFirstFocus = () => {
+      initialHeightRef.current = window.innerHeight;
     };
 
-    const handleFocusOut = (e: FocusEvent) => {
-      const target = e.relatedTarget as HTMLElement | null;
-      if (!target || !target.closest(".cm-editor")) {
-        setVisible(false);
-        if (window.visualViewport) {
-          window.visualViewport.removeEventListener("resize", handleViewportChange);
-          window.visualViewport.removeEventListener("scroll", handleViewportChange);
-        }
-      }
-    };
-
-    document.addEventListener("focusin", handleFocusIn);
-    document.addEventListener("focusout", handleFocusOut);
+    window.addEventListener("focusin", handleFirstFocus, { once: true });
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update();
 
     return () => {
-      document.removeEventListener("focusin", handleFocusIn);
-      document.removeEventListener("focusout", handleFocusOut);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener("resize", handleViewportChange);
-        window.visualViewport.removeEventListener("scroll", handleViewportChange);
-      }
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
     };
   }, []);
+
+  if (!isTouchDevice) return null;
 
   const insertText = (text: string) => {
     const view = editorViewRef.current;
     if (!view) return;
 
+    const { state } = view;
+    const changes = state.selection.ranges.map((range) => ({
+      from: range.from,
+      to: range.to,
+      insert: text,
+    }));
+
     view.dispatch(
-      view.state.update({
-        changes: view.state.selection.ranges.map((range) => ({
-          from: range.from,
-          to: range.to,
-          insert: text,
-        })),
+      state.update({
+        changes,
         selection: {
-          anchor: view.state.selection.main.from + text.length,
+          anchor: state.selection.main.from + text.length,
         },
       })
     );
     view.focus();
   };
 
-  if (!visible) return null;
-
   return (
     <div
-      ref={barRef}
-      className="fixed left-0 right-0 z-50 bg-sidebar border-t border-border shadow-lg"
-      style={{
-        bottom: keyboardHeight > 0 ? keyboardHeight : 0,
-        WebkitOverflowScrolling: "touch",
-      }}
+      className="fixed left-0 right-0 z-[9999]"
+      style={{ bottom: bottomOffset }}
     >
-      <div
-        className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-        onTouchStart={(e) => e.stopPropagation()}
-      >
-        {PYTHON_KEYS.map((key) => (
-          <button
-            key={key.label}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              insertText(key.value);
-            }}
-            className="shrink-0 min-w-[36px] h-8 px-2 text-xs font-mono rounded border border-border bg-card text-foreground hover:bg-accent active:scale-95 transition-transform select-none touch-manipulation"
-            style={{ WebkitTapHighlightColor: "transparent" }}
-          >
-            {key.display}
-          </button>
-        ))}
+      <div className="flex items-center bg-sidebar border-t-2 border-primary/40 shadow-2xl">
+        {/* Drag indicator */}
+        <div className="shrink-0 w-0.5 self-stretch bg-primary/20 mx-1" />
+        <div
+          className="flex items-center gap-1 px-2 py-2 overflow-x-auto flex-1"
+          style={{
+            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {PYTHON_KEYS.map((key) => (
+            <button
+              key={key.label}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                insertText(key.value);
+              }}
+              className="shrink-0 h-9 min-w-[38px] px-2.5 text-sm font-mono rounded-md border border-border bg-card text-foreground active:bg-primary active:text-primary-foreground active:scale-95 transition-all select-none"
+              style={{ WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}
+            >
+              {key.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

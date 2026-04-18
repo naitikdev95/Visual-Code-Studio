@@ -312,6 +312,13 @@
 .cm-scroller {
   overflow: auto;
 }
+
+/* On touch devices, pad the bottom so the fixed keybar doesn't cover code */
+@media (pointer: coarse) {
+  .cm-scroller {
+    padding-bottom: 60px !important;
+  }
+}
 .cm-focused {
   outline: none !important;
 }
