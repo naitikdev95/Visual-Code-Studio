@@ -55,6 +55,8 @@ export default function IDE() {
 
   const [installedPackages, setInstalledPackages] = useState<Set<string>>(new Set());
   const [isInstalling, setIsInstalling] = useState<string | null>(null);
+  const [customInstallingPkg, setCustomInstallingPkg] = useState<string | null>(null);
+  const [customInstalledPkgs, setCustomInstalledPkgs] = useState<Set<string>>(new Set());
 
   // Preview state
   const [plotImageUrl, setPlotImageUrl] = useState("");
@@ -125,6 +127,14 @@ export default function IDE() {
     const ok = await installPackage(lib.pyodideName, addOutput);
     if (ok) setInstalledPackages((prev) => new Set([...prev, lib.pyodideName]));
     setIsInstalling(null);
+  }, [addOutput]);
+
+  const handleInstallCustom = useCallback(async (packageName: string): Promise<boolean> => {
+    setCustomInstallingPkg(packageName);
+    const ok = await installPackage(packageName, addOutput);
+    if (ok) setCustomInstalledPkgs((prev) => new Set([...prev, packageName]));
+    setCustomInstallingPkg(null);
+    return ok;
   }, [addOutput]);
 
   const handleInsertExample = useCallback((code: string) => {
@@ -258,6 +268,9 @@ export default function IDE() {
                 onInstall={handleInstall}
                 onInsertExample={handleInsertExample}
                 isInstalling={isInstalling}
+                onInstallCustom={handleInstallCustom}
+                customInstallingPkg={customInstallingPkg}
+                customInstalledPkgs={customInstalledPkgs}
               />
             )}
             {sidePanel === "settings" && (

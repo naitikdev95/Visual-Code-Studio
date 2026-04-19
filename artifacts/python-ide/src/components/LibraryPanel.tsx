@@ -1,18 +1,31 @@
 import { useState } from "react";
 import { LIBRARIES, LIBRARY_CATEGORIES, Library } from "../lib/libraries";
-import { Package, Download, CheckCircle, ExternalLink, Search, X } from "lucide-react";
+import { Package, Download, CheckCircle, ExternalLink, Search, X, Plus, Loader2 } from "lucide-react";
 
 interface LibraryPanelProps {
   installedPackages: Set<string>;
   onInstall: (pkg: Library) => void;
   onInsertExample: (code: string) => void;
   isInstalling: string | null;
+  onInstallCustom: (packageName: string) => Promise<boolean>;
+  customInstallingPkg: string | null;
+  customInstalledPkgs: Set<string>;
 }
 
-export function LibraryPanel({ installedPackages, onInstall, onInsertExample, isInstalling }: LibraryPanelProps) {
+export function LibraryPanel({
+  installedPackages,
+  onInstall,
+  onInsertExample,
+  isInstalling,
+  onInstallCustom,
+  customInstallingPkg,
+  customInstalledPkgs,
+}: LibraryPanelProps) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [customInput, setCustomInput] = useState("");
+  const [customError, setCustomError] = useState("");
 
   const filtered = LIBRARIES.filter((lib) => {
     const matchesSearch =
@@ -22,13 +35,26 @@ export function LibraryPanel({ installedPackages, onInstall, onInsertExample, is
     return matchesSearch && matchesCat;
   });
 
+  const handleCustomInstall = async () => {
+    const pkg = customInput.trim().toLowerCase().replace(/[^a-z0-9_.\-]/g, "");
+    if (!pkg) { setCustomError("Enter a package name."); return; }
+    setCustomError("");
+    const ok = await onInstallCustom(pkg);
+    if (ok) setCustomInput("");
+    else setCustomError(`Could not install "${pkg}". Check the name and try again.`);
+  };
+
+  const handleCustomKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleCustomInstall();
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="px-3 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-2 mb-2">
           <Package className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Libraries</span>
-          <span className="text-xs text-muted-foreground ml-auto">{installedPackages.size} installed</span>
+          <span className="text-xs text-muted-foreground ml-auto">{installedPackages.size + customInstalledPkgs.size} installed</span>
         </div>
         <div className="relative mb-2">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
@@ -152,6 +178,61 @@ export function LibraryPanel({ installedPackages, onInstall, onInsertExample, is
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Custom Package Installer ─────────────────────────────────────── */}
+      <div className="border-t border-border shrink-0 p-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Import Any Library</span>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Type any PyPI package name to install it directly in the browser.
+        </p>
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            placeholder="e.g. sympy, faker, arrow…"
+            value={customInput}
+            onChange={(e) => { setCustomInput(e.target.value); setCustomError(""); }}
+            onKeyDown={handleCustomKeyDown}
+            disabled={!!customInstallingPkg}
+            className="flex-1 px-2 py-1.5 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-ring text-foreground placeholder:text-muted-foreground disabled:opacity-50"
+          />
+          <button
+            onClick={handleCustomInstall}
+            disabled={!customInput.trim() || !!customInstallingPkg}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity whitespace-nowrap"
+          >
+            {customInstallingPkg ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Download className="w-3 h-3" />
+            )}
+            {customInstallingPkg ? "Installing…" : "Install"}
+          </button>
+        </div>
+        {customError && (
+          <p className="text-xs text-destructive">{customError}</p>
+        )}
+        {customInstallingPkg && (
+          <p className="text-xs text-muted-foreground animate-pulse">
+            Installing <span className="font-mono text-foreground">{customInstallingPkg}</span>… this may take a moment.
+          </p>
+        )}
+        {customInstalledPkgs.size > 0 && (
+          <div className="flex flex-wrap gap-1 pt-0.5">
+            {[...customInstalledPkgs].map((pkg) => (
+              <span
+                key={pkg}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full bg-green-500/15 text-green-400 border border-green-500/20"
+              >
+                <CheckCircle className="w-2.5 h-2.5" />
+                {pkg}
+              </span>
+            ))}
           </div>
         )}
       </div>

@@ -535,6 +535,37 @@ print("\\nBy length:")
 for n, ws in sorted(groups.items()):
     print(f"  {n}: {ws}")`,
   },
+  {
+    id: "colorsys",
+    name: "Colorsys",
+    pyodideName: "colorsys",
+    description: "Convert colours between RGB, HSV, HLS, and YIQ colour systems.",
+    category: "utils",
+    icon: "🎨",
+    builtIn: true,
+    docs: "https://docs.python.org/3/library/colorsys.html",
+    example: `import colorsys
+
+# RGB → HSV
+r, g, b = 0.2, 0.6, 1.0
+h, s, v = colorsys.rgb_to_hsv(r, g, b)
+print(f"RGB ({r}, {g}, {b}) → HSV ({h:.2f}, {s:.2f}, {v:.2f})")
+
+# HSV → RGB
+r2, g2, b2 = colorsys.hsv_to_rgb(h, s, v)
+print(f"HSV ({h:.2f}, {s:.2f}, {v:.2f}) → RGB ({r2:.2f}, {g2:.2f}, {b2:.2f})")
+
+# RGB → HLS
+h2, l, s2 = colorsys.rgb_to_hls(r, g, b)
+print(f"RGB → HLS ({h2:.2f}, {l:.2f}, {s2:.2f})")
+
+# Generate a rainbow palette
+print("\\nRainbow palette (RGB):")
+for i in range(8):
+    hue = i / 8
+    rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+    print(f"  Hue {hue:.2f} → R={rgb[0]:.2f} G={rgb[1]:.2f} B={rgb[2]:.2f}")`,
+  },
 ];
 
 export const STARTER_TEMPLATES = [
