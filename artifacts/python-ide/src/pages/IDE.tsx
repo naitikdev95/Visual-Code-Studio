@@ -14,6 +14,7 @@ import {
   getPyodide,
   runCodeAndGetTurtle,
   installPackage,
+  setOutputCallback,
 } from "../lib/pyodide-runner";
 import { Library } from "../lib/libraries";
 import { useFileSystem } from "../hooks/useFileSystem";
@@ -66,6 +67,11 @@ export default function IDE() {
     setOutput((prev) => [...prev, msg]);
   }, []);
 
+  // Keep the global output callback always pointing to addOutput
+  useEffect(() => {
+    setOutputCallback(addOutput);
+  }, [addOutput]);
+
   // Register matplotlib image callback
   useEffect(() => {
     window._pyPlotImage = (dataUrl: string) => {
@@ -91,12 +97,6 @@ export default function IDE() {
 
     try {
       const pyodide = await getPyodide(addOutput);
-
-      // Wire up stdout/stderr
-      window._pyStdout = (type: string, text: string) => {
-        const trimmed = text.replace(/\n$/, "");
-        if (trimmed) addOutput({ type: type as PyodideOutput["type"], text: trimmed });
-      };
 
       const { turtleCommands: cmds, hasTurtle } = await runCodeAndGetTurtle(
         pyodide,

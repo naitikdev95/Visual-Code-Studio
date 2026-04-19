@@ -7,7 +7,8 @@ export interface Library {
   icon: string;
   docs: string;
   example: string;
-  browserUnsupported?: boolean;
+  browserUnsupported?: boolean; // cannot run in Pyodide
+  builtIn?: boolean;            // already available, no install needed
 }
 
 export const LIBRARY_CATEGORIES = [
@@ -197,43 +198,6 @@ print(f"\\nTop 3 feature importances:")
 for i, imp in sorted(enumerate(clf.feature_importances_), key=lambda x: -x[1])[:3]:
     print(f"  Feature {i}: {imp:.3f}")`,
   },
-  {
-    id: "pytorch",
-    name: "PyTorch",
-    pyodideName: "torch",
-    description: "Deep learning framework by Meta. NOT available in browser — requires a native Python environment.",
-    category: "ml",
-    icon: "🔥",
-    docs: "https://pytorch.org/docs/",
-    browserUnsupported: true,
-    example: `# PyTorch is not available in browser-based Python.
-# Install it locally:
-#   pip install torch
-#
-# Then run:
-import torch
-x = torch.tensor([1.0, 2.0, 3.0])
-print(x * 2)`,
-  },
-  {
-    id: "tensorflow",
-    name: "TensorFlow",
-    pyodideName: "tensorflow",
-    description: "Google's ML framework. NOT available in browser — requires a native Python environment.",
-    category: "ml",
-    icon: "🧠",
-    docs: "https://www.tensorflow.org/",
-    browserUnsupported: true,
-    example: `# TensorFlow is not available in browser-based Python.
-# Install it locally:
-#   pip install tensorflow
-#
-# Then run:
-import tensorflow as tf
-x = tf.constant([1, 2, 3])
-print(x)`,
-  },
-
   // ── NLP ───────────────────────────────────────────────────────────────────
   {
     id: "nltk",
@@ -407,6 +371,7 @@ with Session(engine) as session:
     description: "Draw shapes and patterns with turtle graphics — rendered live in the Preview panel!",
     category: "games",
     icon: "🐢",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/turtle.html",
     example: `import turtle
 
@@ -435,6 +400,7 @@ turtle.exitonclick()`,
     description: "Built-in mathematical functions: trigonometry, logarithms, constants.",
     category: "math",
     icon: "π",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/math.html",
     example: `import math
 
@@ -452,6 +418,7 @@ print(f"factorial(10) = {math.factorial(10)}")`,
     description: "Pseudo-random number generation, shuffling, and sampling.",
     category: "utils",
     icon: "🎲",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/random.html",
     example: `import random
 
@@ -472,6 +439,7 @@ print("Choice:", random.choice(items))`,
     description: "Working with dates and times: date, time, datetime, timedelta.",
     category: "utils",
     icon: "📅",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/datetime.html",
     example: `from datetime import datetime, timedelta, date
 
@@ -491,6 +459,7 @@ print(f"That's about {age_days // 365} years")`,
     description: "Regular expression operations. Pattern matching and text processing.",
     category: "utils",
     icon: "🔍",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/re.html",
     example: `import re
 
@@ -509,6 +478,7 @@ print("Phones found:", phones)`,
     description: "Built-in JSON encoder/decoder.",
     category: "utils",
     icon: "{}",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/json.html",
     example: `import json
 
@@ -531,6 +501,7 @@ print("\\nName:", parsed['name'])`,
     description: "Iterator building blocks: combinations, permutations, chains, cycles.",
     category: "utils",
     icon: "🔄",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/itertools.html",
     example: `import itertools
 
@@ -549,6 +520,7 @@ for c in itertools.combinations(letters, 2):
     description: "High-performance containers: Counter, defaultdict, OrderedDict, deque.",
     category: "utils",
     icon: "📦",
+    builtIn: true,
     docs: "https://docs.python.org/3/library/collections.html",
     example: `from collections import Counter, defaultdict, deque
 

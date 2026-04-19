@@ -31,7 +31,24 @@ declare global {
   }
 }
 
-// The mock turtle module source code — careful: no ${} inside the Python string below
+// ── Global output routing ─────────────────────────────────────────────────
+// window._pyStdout must ALWAYS be defined before any Python runs.
+// We point it to a swappable callback so install + run both route correctly.
+let _activeOutput: (msg: PyodideOutput) => void = () => {};
+
+export function setOutputCallback(cb: (msg: PyodideOutput) => void) {
+  _activeOutput = cb;
+}
+
+// Wire up immediately — never let Python find _pyStdout undefined
+if (typeof window !== "undefined") {
+  window._pyStdout = (type: string, text: string) => {
+    const trimmed = text.replace(/\n$/, "");
+    if (trimmed) _activeOutput({ type: type as PyodideOutput["type"], text: trimmed });
+  };
+}
+
+// ── Turtle mock module (pure Python, no ${} inside) ──────────────────────
 const TURTLE_SETUP = `
 import sys, math, types, json as _json
 
@@ -181,17 +198,14 @@ class _MockTurtle:
 
 _turtle_inst = _MockTurtle()
 _turtle_mod = types.ModuleType('turtle')
-
 for _nm in [n for n in dir(_MockTurtle) if not n.startswith('_')]:
     setattr(_turtle_mod, _nm, getattr(_turtle_inst, _nm))
-
 _turtle_mod.Turtle = lambda: _turtle_inst
 _turtle_mod.Screen = lambda: _turtle_inst
 _turtle_mod._instance = _turtle_inst
 sys.modules['turtle'] = _turtle_mod
 `;
 
-// Reset turtle state before each run
 const TURTLE_RESET = `
 import sys
 _tm = sys.modules.get('turtle')
@@ -210,7 +224,6 @@ if _tm and hasattr(_tm, '_instance'):
     inst.visible = True
 `;
 
-// Get turtle commands JSON after run
 const TURTLE_GET_COMMANDS = `
 import sys
 _tm = sys.modules.get('turtle')
@@ -220,7 +233,7 @@ if _tm and hasattr(_tm, '_instance'):
 _turtle_cmds_json
 `;
 
-// Matplotlib setup — intercept plt.show() to capture image as base64 and send to JS
+// Intercept plt.show() to export as base64 PNG to JS
 const MATPLOTLIB_SETUP = `
 import sys
 try:
@@ -230,8 +243,6 @@ try:
     import io as _io_plt
     import base64 as _b64_plt
     import js as _js_plt
-
-    _orig_show = _plt_orig.show
 
     def _intercept_show(*args, **kwargs):
         figs = [_plt_orig.figure(i) for i in _plt_orig.get_fignums()]
@@ -262,17 +273,21 @@ export async function loadPyodideScript(): Promise<void> {
 }
 
 export async function getPyodide(onOutput?: (msg: PyodideOutput) => void): Promise<PyodideInstance> {
+  // Update the global output callback so Python stdout always works
+  if (onOutput) setOutputCallback(onOutput);
+
   if (pyodideInstance) return pyodideInstance;
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
     await loadPyodideScript();
-    onOutput?.({ type: "info", text: "Loading Python runtime..." });
+    _activeOutput({ type: "info", text: "Loading Python runtime..." });
+
     const pyodide = await window.loadPyodide({
       indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
     });
 
-    // Set up stdout/stderr capture
+    // Set up stdout/stderr → window._pyStdout (already defined above)
     await pyodide.runPythonAsync(`
 import sys, io, js
 
@@ -293,13 +308,11 @@ sys.stderr = _OutputCapture('stderr')
     // Install turtle mock
     await pyodide.runPythonAsync(TURTLE_SETUP);
 
-    // Set up matplotlib capture
-    try {
-      await pyodide.runPythonAsync(MATPLOTLIB_SETUP);
-    } catch { /* matplotlib not available yet */ }
+    // Set up matplotlib capture (may fail if not loaded yet — that's fine)
+    try { await pyodide.runPythonAsync(MATPLOTLIB_SETUP); } catch { /* installed later */ }
 
     pyodideInstance = pyodide;
-    onOutput?.({ type: "info", text: "Python 3.11 runtime ready." });
+    _activeOutput({ type: "info", text: "Python 3.11 runtime ready." });
     return pyodide;
   })();
 
@@ -310,11 +323,9 @@ export async function runCodeAndGetTurtle(
   pyodide: PyodideInstance,
   code: string
 ): Promise<{ turtleCommands: TurtleCommand[] | null; hasTurtle: boolean }> {
-  // Check if code uses turtle
   const hasTurtle = /\bimport\s+turtle\b|from\s+turtle\b/.test(code);
 
   if (hasTurtle) {
-    // Reset turtle state before run
     await pyodide.runPythonAsync(TURTLE_RESET);
   }
 
@@ -335,6 +346,8 @@ export async function installPackage(
   packageName: string,
   onOutput: (msg: PyodideOutput) => void
 ): Promise<boolean> {
+  // Keep stdout routed to this install's output
+  setOutputCallback(onOutput);
   try {
     const pyodide = await getPyodide(onOutput);
     onOutput({ type: "info", text: `Installing ${packageName}...` });
@@ -343,7 +356,7 @@ export async function installPackage(
 import micropip
 await micropip.install('${packageName}')
 `);
-    // Re-apply matplotlib setup in case it was just installed
+    // Re-apply matplotlib setup after matplotlib is installed
     if (packageName === "matplotlib") {
       try { await pyodide.runPythonAsync(MATPLOTLIB_SETUP); } catch { /* ignore */ }
     }

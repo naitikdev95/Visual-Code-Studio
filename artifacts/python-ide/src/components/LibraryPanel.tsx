@@ -91,8 +91,8 @@ export function LibraryPanel({ installedPackages, onInstall, onInsertExample, is
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-xs font-semibold text-foreground">{lib.name}</span>
-                        {lib.browserUnsupported ? (
-                          <span className="text-xs px-1 py-0.5 rounded bg-destructive/20 text-destructive shrink-0">native only</span>
+                        {lib.builtIn ? (
+                          <span className="text-xs px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 shrink-0">built-in</span>
                         ) : installed ? (
                           <CheckCircle className="w-3 h-3 text-green-400 shrink-0" />
                         ) : null}
@@ -108,7 +108,12 @@ export function LibraryPanel({ installedPackages, onInstall, onInsertExample, is
                         {lib.example.split("\n").length > 8 && "\n..."}
                       </div>
                       <div className="flex gap-1.5">
-                        {!installed ? (
+                        {lib.builtIn ? (
+                          <div className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs text-blue-400 border border-blue-400/30 rounded-md">
+                            <CheckCircle className="w-3 h-3" />
+                            Built-in — no install needed
+                          </div>
+                        ) : !installed ? (
                           <button
                             onClick={() => onInstall(lib)}
                             disabled={installing}
