@@ -1,3 +1,4 @@
+import { useMemo, useRef, useEffect } from "react";
 import ReactCodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -63,32 +64,53 @@ export function CodeEditor({
   editorViewRef,
   onKeyDown,
 }: CodeEditorProps) {
-  const extensions = [
+  // Use refs so keydown/run callbacks are always fresh without recreating extensions
+  const onKeyDownRef = useRef(onKeyDown);
+  const onRunRef = useRef(onRun);
+  useEffect(() => { onKeyDownRef.current = onKeyDown; }, [onKeyDown]);
+  useEffect(() => { onRunRef.current = onRun; }, [onRun]);
+
+  const extensions = useMemo(() => [
     python(),
     autocompletion({ override: [pythonCompletions] }),
     keymap.of([
       ...defaultKeymap,
       indentWithTab,
-      { key: "Mod-Enter", run: () => { onRun?.(); return true; } },
+      { key: "Mod-Enter", run: () => { onRunRef.current?.(); return true; } },
     ]),
-    ...(wordWrap ? [EditorView.lineWrapping] : []),
     EditorView.domEventHandlers({
-      keydown(e) {
-        onKeyDown?.(e.key);
+      keydown(e: KeyboardEvent) {
+        onKeyDownRef.current?.(e.key);
         return false;
       },
     }),
-  ];
+    ...(wordWrap ? [EditorView.lineWrapping] : []),
+    // Font size via theme — this is the correct way to set font size in CodeMirror 6
+    EditorView.theme({
+      "&": { fontSize: `${fontSize}px` },
+      ".cm-scroller": {
+        fontFamily: '"Fira Code", "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace',
+        fontSize: `${fontSize}px`,
+        lineHeight: "1.6",
+      },
+      ".cm-gutters": { fontSize: `${fontSize}px` },
+    }),
+  ], [wordWrap, fontSize]);
+
+  const allExtensions = useMemo(
+    () => [...extensions, ...(theme !== "light" ? [oneDark] : [])],
+    [extensions, theme]
+  );
 
   return (
     <div className="h-full w-full overflow-hidden">
       <ReactCodeMirror
         value={value}
         height="100%"
-        extensions={[...extensions, ...(theme !== "light" ? [oneDark] : [])]}
+        extensions={allExtensions}
         onChange={onChange}
         theme={theme === "light" ? "light" : "dark"}
-        style={{ height: "100%", fontSize: `${fontSize}px` }}
+        style={{ height: "100%" }}
         onCreateEditor={(view) => { editorViewRef.current = view; }}
         basicSetup={{
           lineNumbers: true,
@@ -102,7 +124,7 @@ export function CodeEditor({
           closeBrackets: true,
           autocompletion: true,
           rectangularSelection: true,
-          crosshairCursor: true,
+          crosshairCursor: false,
           highlightActiveLine: true,
           highlightSelectionMatches: true,
           closeBracketsKeymap: true,

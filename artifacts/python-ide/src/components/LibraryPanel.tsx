@@ -89,11 +89,13 @@ export function LibraryPanel({ installedPackages, onInstall, onInsertExample, is
                   >
                     <span className="text-base shrink-0 leading-none mt-0.5">{lib.icon}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-1">
                         <span className="text-xs font-semibold text-foreground">{lib.name}</span>
-                        {installed && (
+                        {lib.browserUnsupported ? (
+                          <span className="text-xs px-1 py-0.5 rounded bg-destructive/20 text-destructive shrink-0">native only</span>
+                        ) : installed ? (
                           <CheckCircle className="w-3 h-3 text-green-400 shrink-0" />
-                        )}
+                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{lib.description}</p>
                     </div>

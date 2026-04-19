@@ -8,7 +8,13 @@ import { EditorTabs } from "../components/EditorTabs";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { MobileKeybar } from "../components/MobileKeybar";
 import { TemplateSelector } from "../components/TemplateSelector";
-import { PyodideOutput, getPyodide, installPackage } from "../lib/pyodide-runner";
+import {
+  PyodideOutput,
+  TurtleCommand,
+  getPyodide,
+  runCodeAndGetTurtle,
+  installPackage,
+} from "../lib/pyodide-runner";
 import { Library } from "../lib/libraries";
 import { useFileSystem } from "../hooks/useFileSystem";
 import { useSettings } from "../hooks/useSettings";
@@ -48,13 +54,24 @@ export default function IDE() {
 
   const [installedPackages, setInstalledPackages] = useState<Set<string>>(new Set());
   const [isInstalling, setIsInstalling] = useState<string | null>(null);
-  const [previewContent, setPreviewContent] = useState("");
+
+  // Preview state
+  const [plotImageUrl, setPlotImageUrl] = useState("");
+  const [turtleCommands, setTurtleCommands] = useState<TurtleCommand[] | null>(null);
 
   const editorViewRef = useRef<EditorView | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const addOutput = useCallback((msg: PyodideOutput) => {
     setOutput((prev) => [...prev, msg]);
+  }, []);
+
+  // Register matplotlib image callback
+  useEffect(() => {
+    window._pyPlotImage = (dataUrl: string) => {
+      setPlotImageUrl(dataUrl);
+      setRightTab("preview");
+    };
   }, []);
 
   useEffect(() => {
@@ -69,30 +86,28 @@ export default function IDE() {
     if (isRunning || !fs.activeFile) return;
     setIsRunning(true);
     setOutput([]);
-    setPreviewContent("");
+    setPlotImageUrl("");
+    setTurtleCommands(null);
 
     try {
       const pyodide = await getPyodide(addOutput);
 
-      (window as Window & typeof globalThis)._pyStdout = (type: string, text: string) => {
+      // Wire up stdout/stderr
+      window._pyStdout = (type: string, text: string) => {
         const trimmed = text.replace(/\n$/, "");
         if (trimmed) addOutput({ type: type as PyodideOutput["type"], text: trimmed });
       };
 
-      const result = await pyodide.runPythonAsync(fs.activeFile.content);
-      if (result !== undefined && result !== null) {
-        addOutput({ type: "result", text: String(result) });
-      }
+      const { turtleCommands: cmds, hasTurtle } = await runCodeAndGetTurtle(
+        pyodide,
+        fs.activeFile.content
+      );
 
-      const fsPyodide = (pyodide as unknown as { FS?: { readFile?: (p: string) => Uint8Array } }).FS;
-      if (fsPyodide?.readFile) {
-        try {
-          const pngData = fsPyodide.readFile("/tmp/plot.png");
-          const blob = new Blob([pngData], { type: "image/png" });
-          setPreviewContent(URL.createObjectURL(blob));
-          setRightTab("preview");
-          addOutput({ type: "info", text: "Plot rendered in Preview tab." });
-        } catch { /* no plot */ }
+      if (hasTurtle && cmds) {
+        setTurtleCommands(cmds);
+        setRightTab("preview");
+        const lineCount = cmds.filter((c) => c.type === "line").length;
+        addOutput({ type: "info", text: `Turtle drawing complete — ${lineCount} line${lineCount !== 1 ? "s" : ""} drawn.` });
       }
     } catch (err: unknown) {
       addOutput({ type: "error", text: (err as Error).message ?? String(err) });
@@ -102,6 +117,10 @@ export default function IDE() {
   }, [isRunning, fs.activeFile, addOutput]);
 
   const handleInstall = useCallback(async (lib: Library) => {
+    if (lib.browserUnsupported) {
+      addOutput({ type: "error", text: `${lib.name} requires native C extensions and cannot run in the browser. Try numpy, pandas, matplotlib, seaborn, or scikit-learn instead.` });
+      return;
+    }
     setIsInstalling(lib.id);
     const ok = await installPackage(lib.pyodideName, addOutput);
     if (ok) setInstalledPackages((prev) => new Set([...prev, lib.pyodideName]));
@@ -139,13 +158,13 @@ export default function IDE() {
     settings.theme === "monokai" ? "theme-monokai" : "";
 
   const hasError = output.some((o) => o.type === "error");
+  const hasPreview = !!plotImageUrl || (turtleCommands && turtleCommands.length > 0);
 
   return (
     <div className={`h-screen w-screen flex flex-col overflow-hidden ${themeClass} bg-background text-foreground`}>
 
       {/* ── Top Menu Bar ── */}
       <header className="flex items-center gap-2 px-2 py-1.5 border-b border-border bg-sidebar shrink-0 min-w-0">
-        {/* Logo */}
         <div className="flex items-center gap-1.5 shrink-0 mr-1">
           <div className="w-5 h-5 rounded bg-primary flex items-center justify-center">
             <Code2 className="w-3 h-3 text-primary-foreground" />
@@ -153,7 +172,6 @@ export default function IDE() {
           <span className="text-xs font-bold text-foreground hidden sm:block tracking-tight">PyIDE</span>
         </div>
 
-        {/* Run Button */}
         <button
           onClick={handleRun}
           disabled={isRunning || isPyodideLoading}
@@ -163,7 +181,6 @@ export default function IDE() {
           <span className="hidden xs:block">{isRunning ? "Running" : "Run"}</span>
         </button>
 
-        {/* Runtime status */}
         <div className="flex items-center gap-1 shrink-0">
           {isPyodideLoading ? (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -178,14 +195,12 @@ export default function IDE() {
           ) : null}
         </div>
 
-        {/* Templates */}
         <div className="hidden sm:block">
-          <TemplateSelector onSelect={(c) => { if (fs.activeFile) fs.updateFileContent(fs.activeFile.id, c); setOutput([]); }} />
+          <TemplateSelector onSelect={(c) => { if (fs.activeFile) fs.updateFileContent(fs.activeFile.id, c); setOutput([]); setPlotImageUrl(""); setTurtleCommands(null); }} />
         </div>
 
         <div className="flex-1" />
 
-        {/* Panel toggles */}
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => setRightPanelOpen((v) => !v)}
@@ -212,11 +227,11 @@ export default function IDE() {
               title={label}
               className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
                 sidePanel === id && sidePanelOpen
-                  ? "bg-primary/20 text-primary border-l-2 border-primary"
+                  ? "bg-primary/20 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent"
               }`}
             >
-              <Icon className="w-4.5 h-4.5" />
+              <Icon className="w-4 h-4" />
             </button>
           ))}
         </div>
@@ -254,7 +269,6 @@ export default function IDE() {
         {/* ── Editor Column ── */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-          {/* File Tabs */}
           <EditorTabs
             files={fs.files}
             activeFileId={fs.activeFileId}
@@ -270,15 +284,13 @@ export default function IDE() {
             onChange={handleImportChange}
           />
 
-          {/* Breadcrumb */}
           <div className="flex items-center gap-1 px-3 py-1 border-b border-border bg-card/30 shrink-0 text-xs text-muted-foreground">
             <Code2 className="w-3 h-3 opacity-60" />
             <ChevronRight className="w-3 h-3 opacity-40" />
             <span className="font-medium text-foreground/80">{fs.activeFile?.name ?? "..."}</span>
-            <span className="ml-auto hidden sm:block opacity-60">Ctrl+Enter to run · Ctrl+Space for completions</span>
+            <span className="ml-auto hidden sm:block opacity-60">Ctrl+Enter to run · Ctrl+Space completions</span>
           </div>
 
-          {/* CodeMirror */}
           <div className="flex-1 min-h-0 overflow-hidden">
             <CodeEditor
               value={fs.activeFile?.content ?? ""}
@@ -293,10 +305,9 @@ export default function IDE() {
           </div>
         </div>
 
-        {/* ── Right Panel: Output + Preview ── */}
+        {/* ── Right Panel ── */}
         {rightPanelOpen && (
           <div className="w-72 shrink-0 border-l border-border flex flex-col overflow-hidden">
-            {/* Tabs */}
             <div className="flex items-center border-b border-border shrink-0 bg-sidebar">
               <button
                 onClick={() => setRightTab("output")}
@@ -320,7 +331,7 @@ export default function IDE() {
               >
                 <Monitor className="w-3.5 h-3.5" />
                 Preview
-                {previewContent && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
+                {hasPreview && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
               </button>
             </div>
 
@@ -328,14 +339,17 @@ export default function IDE() {
               {rightTab === "output" ? (
                 <OutputPanel output={output} onClear={() => setOutput([])} />
               ) : (
-                <PreviewPanel previewContent={previewContent} isRunning={isRunning} />
+                <PreviewPanel
+                  previewContent={plotImageUrl}
+                  turtleCommands={turtleCommands}
+                  isRunning={isRunning}
+                />
               )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Mobile Keybar */}
       <MobileKeybar editorViewRef={editorViewRef} />
 
       {/* ── Status Bar ── */}
@@ -364,12 +378,8 @@ export default function IDE() {
               Executing...
             </span>
           )}
-          {settings.typingSound && (
-            <span className="opacity-70">🔊 Sound On</span>
-          )}
-          <span className="opacity-70">
-            {fs.activeFile?.name}
-          </span>
+          {settings.typingSound && <span className="opacity-70">🔊</span>}
+          <span className="opacity-70">{fs.activeFile?.name}</span>
           <span className="opacity-70">UTF-8</span>
         </div>
       </div>

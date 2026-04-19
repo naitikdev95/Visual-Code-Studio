@@ -1,23 +1,5 @@
 import { useRef, useCallback } from "react";
 
-let sharedCtx: AudioContext | null = null;
-
-function getCtx(): AudioContext | null {
-  try {
-    if (!sharedCtx) {
-      sharedCtx = new (window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext)();
-    }
-    if (sharedCtx.state === "suspended") {
-      sharedCtx.resume();
-    }
-    return sharedCtx;
-  } catch {
-    return null;
-  }
-}
-
 function noiseClick(ctx: AudioContext, durationSec: number, volume: number, decay: number) {
   const size = Math.floor(ctx.sampleRate * durationSec);
   const buf = ctx.createBuffer(1, size, ctx.sampleRate);
@@ -49,35 +31,50 @@ function toneClick(ctx: AudioContext, freq: number, durationSec: number, volume:
 }
 
 export function useTypingSound(enabled: boolean, volume: number) {
-  const lastKey = useRef<number>(0);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const lastKeyRef = useRef<number>(0);
+  const enabledRef = useRef(enabled);
+  const volumeRef = useRef(volume);
 
-  const play = useCallback(
-    (key: string) => {
-      if (!enabled) return;
-      const now = Date.now();
-      if (now - lastKey.current < 20) return; // debounce rapid fire
-      lastKey.current = now;
+  enabledRef.current = enabled;
+  volumeRef.current = volume;
 
-      const ctx = getCtx();
-      if (!ctx) return;
+  const play = useCallback((key: string) => {
+    if (!enabledRef.current) return;
 
-      const v = Math.max(0, Math.min(1, volume));
+    const now = Date.now();
+    if (now - lastKeyRef.current < 25) return;
+    lastKeyRef.current = now;
+
+    try {
+      // Create AudioContext lazily inside user gesture (keydown = user gesture)
+      if (!ctxRef.current || ctxRef.current.state === "closed") {
+        ctxRef.current = new AudioContext();
+      }
+      const ctx = ctxRef.current;
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+        return; // Skip this keystroke — next one will work after resume
+      }
+
+      const v = Math.max(0, Math.min(1, volumeRef.current));
 
       if (key === "Enter") {
         toneClick(ctx, 380, 0.07, v * 0.18);
         noiseClick(ctx, 0.03, v * 0.25, 0.1);
       } else if (key === " ") {
-        noiseClick(ctx, 0.045, v * 0.35, 0.18);
+        noiseClick(ctx, 0.05, v * 0.4, 0.2);
       } else if (key === "Backspace" || key === "Delete") {
         noiseClick(ctx, 0.02, v * 0.22, 0.06);
       } else if (key === "Tab") {
         toneClick(ctx, 500, 0.04, v * 0.1);
       } else if (key.length === 1) {
-        noiseClick(ctx, 0.022, v * 0.3, 0.07);
+        noiseClick(ctx, 0.022, v * 0.32, 0.08);
       }
-    },
-    [enabled, volume]
-  );
+    } catch {
+      // AudioContext not available in this browser
+    }
+  }, []); // stable — reads from refs
 
   return play;
 }
