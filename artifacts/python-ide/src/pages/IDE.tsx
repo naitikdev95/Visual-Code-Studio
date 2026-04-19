@@ -6,7 +6,6 @@ import { LibraryPanel } from "../components/LibraryPanel";
 import { FileExplorer } from "../components/FileExplorer";
 import { EditorTabs } from "../components/EditorTabs";
 import { SettingsPanel } from "../components/SettingsPanel";
-import { MobileKeybar } from "../components/MobileKeybar";
 import { TemplateSelector } from "../components/TemplateSelector";
 import {
   PyodideOutput,
@@ -74,10 +73,11 @@ export default function IDE() {
     setOutputCallback(addOutput);
   }, [addOutput]);
 
-  // Register matplotlib image callback
+  // Register matplotlib / PIL image callback — also force the right panel open
   useEffect(() => {
     window._pyPlotImage = (dataUrl: string) => {
       setPlotImageUrl(dataUrl);
+      setRightPanelOpen(true);
       setRightTab("preview");
     };
   }, []);
@@ -107,6 +107,7 @@ export default function IDE() {
 
       if (hasTurtle && cmds) {
         setTurtleCommands(cmds);
+        setRightPanelOpen(true);
         setRightTab("preview");
         const lineCount = cmds.filter((c) => c.type === "line").length;
         addOutput({ type: "info", text: `Turtle drawing complete — ${lineCount} line${lineCount !== 1 ? "s" : ""} drawn.` });
@@ -362,8 +363,6 @@ export default function IDE() {
           </div>
         )}
       </div>
-
-      <MobileKeybar editorViewRef={editorViewRef} />
 
       {/* ── Status Bar ── */}
       <div className="flex items-center justify-between px-3 py-0.5 border-t border-border bg-primary text-primary-foreground shrink-0 text-xs">

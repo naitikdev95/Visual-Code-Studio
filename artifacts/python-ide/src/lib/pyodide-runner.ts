@@ -246,16 +246,68 @@ try:
 
     def _intercept_show(*args, **kwargs):
         figs = [_plt_orig.figure(i) for i in _plt_orig.get_fignums()]
-        for fig in figs:
+        if not figs:
+            # If plt.show() called but no figure exists, save current axes
             buf = _io_plt.BytesIO()
-            fig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+            _plt_orig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
             buf.seek(0)
             b64 = _b64_plt.b64encode(buf.read()).decode()
             _js_plt.window._pyPlotImage('data:image/png;base64,' + b64)
             buf.close()
+        else:
+            for fig in figs:
+                buf = _io_plt.BytesIO()
+                fig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+                buf.seek(0)
+                b64 = _b64_plt.b64encode(buf.read()).decode()
+                _js_plt.window._pyPlotImage('data:image/png;base64,' + b64)
+                buf.close()
         _plt_orig.close('all')
 
     _plt_orig.show = _intercept_show
+except Exception:
+    pass
+`;
+
+// Intercept PIL/Pillow Image.show() to export as base64 PNG
+const PIL_SETUP = `
+import sys
+try:
+    import PIL.Image as _pil_img
+    import io as _io_pil
+    import base64 as _b64_pil
+    import js as _js_pil
+
+    def _pil_show(self, title=None, command=None):
+        buf = _io_pil.BytesIO()
+        self.save(buf, format='PNG')
+        buf.seek(0)
+        b64 = _b64_pil.b64encode(buf.read()).decode()
+        _js_pil.window._pyPlotImage('data:image/png;base64,' + b64)
+        buf.close()
+
+    _pil_img.Image.show = _pil_show
+except Exception:
+    pass
+`;
+
+// After running user code, auto-capture any open matplotlib figure even if plt.show() wasn't called
+const MATPLOTLIB_AUTO_CAPTURE = `
+import sys
+try:
+    import matplotlib.pyplot as _plt_ac
+    import io as _io_ac
+    import base64 as _b64_ac
+    import js as _js_ac
+    figs = [_plt_ac.figure(i) for i in _plt_ac.get_fignums()]
+    for fig in figs:
+        buf = _io_ac.BytesIO()
+        fig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+        buf.seek(0)
+        b64 = _b64_ac.b64encode(buf.read()).decode()
+        _js_ac.window._pyPlotImage('data:image/png;base64,' + b64)
+        buf.close()
+    _plt_ac.close('all')
 except Exception:
     pass
 `;
@@ -308,8 +360,9 @@ sys.stderr = _OutputCapture('stderr')
     // Install turtle mock
     await pyodide.runPythonAsync(TURTLE_SETUP);
 
-    // Set up matplotlib capture (may fail if not loaded yet — that's fine)
+    // Set up matplotlib + PIL capture (may fail if not loaded yet — that's fine)
     try { await pyodide.runPythonAsync(MATPLOTLIB_SETUP); } catch { /* installed later */ }
+    try { await pyodide.runPythonAsync(PIL_SETUP); } catch { /* installed later */ }
 
     pyodideInstance = pyodide;
     _activeOutput({ type: "info", text: "Python 3.11 runtime ready." });
@@ -324,12 +377,27 @@ export async function runCodeAndGetTurtle(
   code: string
 ): Promise<{ turtleCommands: TurtleCommand[] | null; hasTurtle: boolean }> {
   const hasTurtle = /\bimport\s+turtle\b|from\s+turtle\b/.test(code);
+  const hasMatplotlib = /\bimport\s+matplotlib\b|from\s+matplotlib\b/.test(code);
+  const hasPil = /\bimport\s+PIL\b|from\s+PIL\b|from\s+Pillow\b/.test(code);
+
+  // Always re-apply visual interceptors before running so they're fresh
+  if (hasMatplotlib) {
+    try { await pyodide.runPythonAsync(MATPLOTLIB_SETUP); } catch { /* ignore */ }
+  }
+  if (hasPil) {
+    try { await pyodide.runPythonAsync(PIL_SETUP); } catch { /* ignore */ }
+  }
 
   if (hasTurtle) {
     await pyodide.runPythonAsync(TURTLE_RESET);
   }
 
   await pyodide.runPythonAsync(code);
+
+  // Auto-capture any matplotlib figure left open (even if plt.show() wasn't called)
+  if (hasMatplotlib) {
+    try { await pyodide.runPythonAsync(MATPLOTLIB_AUTO_CAPTURE); } catch { /* ignore */ }
+  }
 
   if (hasTurtle) {
     const json = await pyodide.runPythonAsync(TURTLE_GET_COMMANDS) as string;
@@ -356,9 +424,12 @@ export async function installPackage(
 import micropip
 await micropip.install('${packageName}')
 `);
-    // Re-apply matplotlib setup after matplotlib is installed
+    // Re-apply visual interceptors after the relevant package is installed
     if (packageName === "matplotlib") {
       try { await pyodide.runPythonAsync(MATPLOTLIB_SETUP); } catch { /* ignore */ }
+    }
+    if (packageName === "pillow" || packageName === "Pillow" || packageName === "PIL") {
+      try { await pyodide.runPythonAsync(PIL_SETUP); } catch { /* ignore */ }
     }
     onOutput({ type: "info", text: `Successfully installed ${packageName}` });
     return true;
